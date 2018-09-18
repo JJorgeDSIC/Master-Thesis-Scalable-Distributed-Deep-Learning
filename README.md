@@ -20,8 +20,4 @@ TO DO
 
 # [Distributed TensorFlow code & scripts](https://www.tensorflow.org/deploy/distributed)
 
-<<<<<<< HEAD
 TO DO
-=======
-TO DO
->>>>>>> 5cb53d717c1bf7041ab309213ada1b00c39985c3
