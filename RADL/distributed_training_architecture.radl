@@ -1,0 +1,302 @@
+network publica (
+  outbound = 'yes' and
+  outports = '2222/tcp-2222/tcp,22/tcp-22/tcp,6006/tcp-6006/tcp,8888/tcp-8888/tcp, 9000/tcp-9000/tcp, 8033/tcp-8033/tcp' and
+  provider_id = 'vpc-VPC_ID.subnet-SUBNET_ID'
+  
+)
+network privada(
+  outbound = 'no' and
+  outports = '2222/tcp-2222/tcp,22/tcp-22/tcp,6006/tcp-6006/tcp, 9000/tcp-9000/tcp, 8033/tcp-8033/tcp, 8888/tcp-8888/tcp' and
+  provider_id = 'vpc-VPC_ID.subnet-SUBNET_ID'
+)
+
+system ps (
+  net_interface.0.connection = 'publica' and
+  net_interface.0.dns_name = 'ps-#N#' and
+  net_interface.1.connection = 'privada' and
+  net_interface.1.dns_name = 'ps-#N#-priv' and
+  disk.0.image.url = 'aws://us-east-1/ami-0b1dcc9564b83676d' and #Pick Ubuntu 16.04 AMI
+  instance_type = 't2.small' and
+  disk.0.os.name='linux' and
+  disk.0.os.credentials.username='ubuntu' and
+  disk.0.applications contains (name='ansible.modules.git+https://github.com/JJorgeDSIC/ansible-role-hadoop-1|hadoop') and
+  disk.0.applications contains (name='ansible.modules.git+https://github.com/JJorgeDSIC/ansible-role-test-async|distributed_tf')
+)
+
+system ps_gpu (
+  net_interface.0.connection = 'publica' and
+  net_interface.0.dns_name = 'ps-#N#' and
+  net_interface.1.connection = 'privada' and
+  net_interface.1.dns_name = 'ps-#N#-priv' and
+  disk.0.image.url = 'aws://us-east-1/ami-0b1dcc9564b83676d' and #Pick Ubuntu 16.04 AMI
+  instance_type = 'p2.xlarge' and
+  disk.0.os.name='linux' and
+  disk.0.os.credentials.username='ubuntu' and
+  disk.0.applications contains (name='ansible.modules.git+https://github.com/JJorgeDSIC/ansible-role-hadoop-1|hadoop') and
+  disk.0.applications contains (name='ansible.modules.git+https://github.com/JJorgeDSIC/ansible-role-test-async|distributed_tf')
+)
+
+
+system master_gpu (
+  net_interface.0.connection = 'privada' and
+  net_interface.0.dns_name = 'worker-#N#' and
+  net_interface.1.connection = 'publica' and
+  disk.0.image.url = 'aws://us-east-1/ami-0b1dcc9564b83676d' and #Pick Ubuntu 16.04 AMI
+  instance_type = 'p2.xlarge' and
+  disk.0.os.name='linux' and
+  disk.0.os.credentials.username='ubuntu' and
+  disk.0.applications contains (name='ansible.modules.git+https://github.com/JJorgeDSIC/ansible-role-hadoop-1|hadoop') and
+  disk.0.applications contains (name='ansible.modules.git+https://github.com/JJorgeDSIC/ansible-role-test-async|distributed_tf')
+)
+
+system worker_gpu (
+  net_interface.0.connection = 'privada' and
+  net_interface.0.dns_name = 'worker-#N#' and
+  net_interface.1.connection = 'publica' and
+  disk.0.image.url = 'aws://us-east-1/ami-0b1dcc9564b83676d' and #Pick Ubuntu 16.04 AMI
+  instance_type = 'p2.xlarge' and
+  disk.0.os.name='linux' and
+  disk.0.os.credentials.username='ubuntu' and
+  disk.0.applications contains (name='ansible.modules.git+https://github.com/JJorgeDSIC/ansible-role-hadoop-1|hadoop') and
+  disk.0.applications contains (name='ansible.modules.git+https://github.com/JJorgeDSIC/ansible-role-test-async|distributed_tf')
+)
+
+
+
+###########################################################################
+#  --------- HDFS installation & configuration   -----------------------  #
+###########################################################################
+
+configure hadoop_step1_master (
+@begin
+---
+  - vars:
+
+    tasks:
+      - lineinfile: dest=/etc/ssh/sshd_config regexp="PasswordAuthentication no" line="PasswordAuthentication no" state=absent
+      - lineinfile: dest=/etc/ssh/sshd_config regexp="PasswordAuthentication yes" line="PasswordAuthentication yes" state=present
+
+      - service: name=ssh state=restarted
+      - name: Install openjdk-8-jdk
+        apt: pkg=openjdk-8-jdk state=latest update_cache=yes
+
+      - lineinfile: dest=/etc/bash.bashrc line="export HADOOP_HOME=/opt/hadoop" create=yes
+      - lineinfile: dest=/etc/bash.bashrc line="export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop" create=yes
+      - lineinfile: dest=/etc/bash.bashrc line="export PATH=$PATH:$HADOOP_HOME/bin:$SPARK_HOME/bin" create=yes
+      
+      - lineinfile: dest=/home/ubuntu/.bashrc line="export HADOOP_HOME=/opt/hadoop" create=yes
+      - lineinfile: dest=/home/ubuntu/.bashrc line="export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop" create=yes
+      - lineinfile: dest=/home/ubuntu/.bashrc line="export PATH=$PATH:$HADOOP_HOME/bin:$SPARK_HOME/bin" create=yes
+    roles:
+      - { role: 'hadoop', hadoop_version: '2.9.0', hadoop_master: 'ps-0-priv', hadoop_type_of_node: 'master' }
+
+@end
+)
+
+configure hadoop_step1_slave (
+@begin
+---
+  - vars:
+
+    tasks:
+      - lineinfile: dest=/etc/ssh/sshd_config regexp="PasswordAuthentication no" line="PasswordAuthentication no" state=absent
+      - lineinfile: dest=/etc/ssh/sshd_config regexp="PasswordAuthentication yes" line="PasswordAuthentication yes" state=present
+
+      - service: name=ssh state=restarted
+      - name: Install openjdk-8-jdk
+        apt: pkg=openjdk-8-jdk state=latest update_cache=yes
+
+      - lineinfile: dest=/etc/bash.bashrc line="export HADOOP_HOME=/opt/hadoop" create=yes
+      - lineinfile: dest=/etc/bash.bashrc line="export HADOOP_CONF_DIR=$HADOOP_HOME/etc/hadoop" create=yes
+      - lineinfile: dest=/etc/bash.bashrc line="export PATH=$PATH:$HADOOP_HOME/bin:$SPARK_HOME/bin" create=yes
+
+    roles:
+      - { role: 'hadoop', hadoop_version: '2.9.0', hadoop_master: 'ps-0-priv'}
+
+@end
+)
+
+
+configure hadoop_step2_common (
+@begin
+---
+  - vars:
+
+    tasks:
+      - lineinfile: dest=/etc/bash.bashrc line="export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64" create=yes
+      - lineinfile: dest=/etc/bash.bashrc line="export HADOOP_HDFS_HOME=/opt/hadoop-2.9.0" create=yes
+      - lineinfile: dest=/home/ubuntu/.bashrc line="export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64" create=yes
+      - lineinfile: dest=/home/ubuntu/.bashrc line="export HADOOP_HDFS_HOME=/opt/hadoop-2.9.0" create=yes
+@end
+)
+
+configure hadoop_step3_common (
+@begin
+---
+  - vars:
+      hadoop_home: /opt/hadoop-2.X
+    tasks:
+    - lineinfile: dest=/etc/bash.bashrc line="export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${JAVA_HOME}/jre/lib/amd64/server" create=yes
+    - lineinfile: dest=/etc/bash.bashrc line="export CLASSPATH=$(${HADOOP_HDFS_HOME}/bin/hadoop classpath --glob)" create=yes
+    - lineinfile: dest=/home/ubuntu/.bashrc line="export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${JAVA_HOME}/jre/lib/amd64/server" create=yes
+    - lineinfile: dest=/home/ubuntu/.bashrc line="export CLASSPATH=$(${HADOOP_HDFS_HOME}/bin/hadoop classpath --glob)" create=yes
+@end
+)
+
+###########################################################################
+#  --------- TensorFlow installation   ---------------------------------  #
+###########################################################################
+
+
+configure manual_tf (
+@begin
+---
+  - vars:
+
+    roles:
+
+    tasks:
+
+    - name: Install Tensorflow
+      pip:
+        name: tensorflow
+        executable: pip3 
+
+@end
+)
+
+
+
+configure manual_tf_gpu (
+@begin
+---
+  - vars:
+
+    roles:
+
+    tasks:
+
+    - name: Install Tensorflow
+      pip:
+        name: tensorflow-gpu
+        executable: pip3 
+
+@end
+)
+
+
+configure download_repo (
+@begin
+
+  - vars:
+
+    roles:
+
+    tasks:
+
+    - name: Cloning repository with TF code 
+      git: 
+        repo: 'https://github.com/JJorgeDSIC/DistributedTensorFlowCodeForIM.git'
+        dest: '/home/ubuntu/TF_models'
+        clone: yes
+      become: yes
+      become_user: ubuntu 
+@end
+)
+
+###########################################################################
+#  --------- Data downloading and HDFS   -------------------------------  #
+###########################################################################
+
+configure getting_and_distributing_data (
+@begin
+---
+  - vars:
+     
+    roles:
+
+    tasks:
+
+    - name: Download data
+      command: ./get_cifar10_tfrecords.sh
+      become: yes
+      become_user: ubuntu
+      args:
+        chdir: '/home/ubuntu/TF_models/resnet/'
+
+    - name: Uploading data to HDFS
+      command: /opt/hadoop/bin/hadoop fs -put /tmp/cifar-10-data/ /
+      become: yes
+      become_user: ubuntu   
+
+    - name: Creating model directory on HDFS
+      command: /opt/hadoop/bin/hadoop fs -mkdir /cifar-10-model
+      become: yes
+      become_user: ubuntu  
+@end
+)
+
+
+
+###########################################################################
+#  --------- Distributed TensorFlow configuration ----------------------  #
+###########################################################################
+
+configure distributed_tensorflow_ps (
+@begin
+---
+  - vars:
+
+    tasks:
+
+    roles:
+      - { role: 'distributed_tf', node_type: 'ps', num_gpu: 0, ps_nodes_list: 'ps-0:2222', worker_nodes_list: 'worker-1:2222', launch_tensorboard: false, launch_training: true, train_steps: 500, access_key: 'INSERT_ACCESS_KEY', secret_key: 'INSERT_SECRET_KEY' }
+
+
+@end
+)
+
+
+configure distributed_tensorflow_master (
+@begin
+---
+  - vars:
+
+    tasks:
+
+    roles:
+      - { role: 'distributed_tf', node_type: 'master', num_gpu: 1, ps_nodes_list: 'ps-0:2222', worker_nodes_list: 'worker-1:2222', launch_tensorboard: true, launch_training: true, train_steps: 500, access_key: 'INSERT_ACCESS_KEY', secret_key: 'INSERT_SECRET_KEY' }
+
+
+@end
+)
+
+
+
+deploy ps 1
+deploy master_gpu 1
+
+
+contextualize (
+    system ps configure hadoop_step1_master step 1
+    system master_gpu configure hadoop_step1_slave step 2
+
+    system ps configure hadoop_step2_common step 3
+    system master_gpu configure hadoop_step2_common step 4
+
+    system ps configure hadoop_step3_common step 5
+    system master_gpu configure hadoop_step3_common step 6
+
+    system ps configure manual_tf step 7
+    system master_gpu configure manual_tf_gpu step 8
+
+    system ps configure download_repo step 9
+    system ps configure getting_and_distributing_data step 10
+
+    system master_gpu configure download_repo step 11
+
+    system ps configure distributed_tensorflow_ps step 12
+    system master_gpu configure distributed_tensorflow_master step 13
+
+)
+
