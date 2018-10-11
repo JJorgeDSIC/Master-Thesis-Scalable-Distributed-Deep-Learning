@@ -159,7 +159,7 @@ configure manual_tf (
 
     - name: Install Tensorflow
       pip:
-        name: tensorflow
+        name: tensorflow==1.10
         executable: pip3 
 
 @end
@@ -178,7 +178,7 @@ configure manual_tf_gpu (
 
     - name: Install Tensorflow
       pip:
-        name: tensorflow-gpu
+        name: tensorflow-gpu==1.10
         executable: pip3 
 
 @end
